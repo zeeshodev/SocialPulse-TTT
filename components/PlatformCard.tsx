@@ -1,14 +1,14 @@
 import React, { useState } from 'react';
 import { PlatformInsight, PlatformStatus } from '../types';
 import { EngagementChart } from './EngagementChart';
-import { 
-  Instagram, 
-  Linkedin, 
-  Twitter, 
-  Facebook, 
-  Youtube, 
-  Video, 
-  TrendingUp, 
+import {
+  Instagram,
+  Linkedin,
+  Twitter,
+  Facebook,
+  Youtube,
+  Video,
+  TrendingUp,
   Clock,
   Sparkles,
   Share2,
@@ -24,10 +24,10 @@ interface PlatformCardProps {
 const getIcon = (name: string) => {
   const n = name.toLowerCase();
   if (n.includes('instagram')) return <Instagram className="w-6 h-6 text-pink-500" />;
-  if (n.includes('linkedin')) return <Linkedin className="w-6 h-6 text-blue-500" />;
-  if (n.includes('twitter') || n.includes('x')) return <Twitter className="w-6 h-6 text-sky-400" />;
   if (n.includes('facebook')) return <Facebook className="w-6 h-6 text-blue-600" />;
   if (n.includes('youtube')) return <Youtube className="w-6 h-6 text-red-500" />;
+  if (n.includes('linkedin')) return <Linkedin className="w-6 h-6 text-blue-500" />;
+  if (n.includes('twitter') || n.includes('x')) return <Twitter className="w-6 h-6 text-sky-400" />;
   if (n.includes('tiktok')) return <Video className="w-6 h-6 text-teal-400" />;
   return <TrendingUp className="w-6 h-6 text-gray-400" />;
 };
@@ -43,13 +43,13 @@ const getStatusStyles = (status: PlatformStatus) => {
 };
 
 const getChartColor = (status: PlatformStatus) => {
-    switch (status) {
-      case PlatformStatus.EXCELLENT: return '#34d399';
-      case PlatformStatus.GOOD: return '#60a5fa';
-      case PlatformStatus.FAIR: return '#facc15';
-      case PlatformStatus.POOR: return '#fb7185';
-      default: return '#94a3b8';
-    }
+  switch (status) {
+    case PlatformStatus.EXCELLENT: return '#34d399';
+    case PlatformStatus.GOOD: return '#60a5fa';
+    case PlatformStatus.FAIR: return '#facc15';
+    case PlatformStatus.POOR: return '#fb7185';
+    default: return '#94a3b8';
+  }
 };
 
 export const PlatformCard: React.FC<PlatformCardProps> = ({ platform, onSchedule }) => {
@@ -64,19 +64,19 @@ export const PlatformCard: React.FC<PlatformCardProps> = ({ platform, onSchedule
       `via SocialPulse AI`;
 
     if (navigator.share) {
-      try { await navigator.share({ title: 'SocialPulse Insight', text }); } catch (err) {}
+      try { await navigator.share({ title: 'SocialPulse Insight', text }); } catch (err) { }
     } else {
       try {
         await navigator.clipboard.writeText(text);
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
-      } catch (err) {}
+      } catch (err) { }
     }
   };
 
   return (
     <div className="group relative bg-[#0F172A]/60 backdrop-blur-md border border-white/5 rounded-2xl p-6 transition-all duration-300 hover:border-indigo-500/30 hover:shadow-2xl hover:shadow-indigo-500/5 overflow-hidden">
-      
+
       {/* Header */}
       <div className="flex justify-between items-start mb-6 relative z-10">
         <div className="flex items-center gap-4">
@@ -91,7 +91,7 @@ export const PlatformCard: React.FC<PlatformCardProps> = ({ platform, onSchedule
             </div>
           </div>
         </div>
-        
+
         <div className="text-right">
           <div className="text-3xl font-bold text-slate-100 tabular-nums">{platform.viralityScore}</div>
           <div className="text-[10px] text-slate-500 font-semibold uppercase tracking-wider">Virality Score</div>
@@ -106,7 +106,7 @@ export const PlatformCard: React.FC<PlatformCardProps> = ({ platform, onSchedule
             Best time: <span className="text-white font-semibold">{platform.nextBestSlot}</span>
           </span>
         </div>
-        
+
         <p className="text-sm text-slate-400 leading-relaxed min-h-[2.5rem]">
           {platform.reasoning}
         </p>
@@ -114,12 +114,12 @@ export const PlatformCard: React.FC<PlatformCardProps> = ({ platform, onSchedule
 
       {/* Chart */}
       <div className="relative h-32 w-full -mx-2 mb-2">
-         <EngagementChart data={platform.hourlyForecast || []} color={chartColor} />
+        <EngagementChart data={platform.hourlyForecast || []} color={chartColor} />
       </div>
 
       {/* Actions */}
       <div className="flex gap-2 mt-2 pt-4 border-t border-white/5">
-         <button
+        <button
           onClick={onSchedule}
           className="flex-1 flex items-center justify-center gap-2 py-2 rounded-lg bg-slate-800/50 hover:bg-indigo-600/20 text-slate-300 hover:text-indigo-300 text-sm font-medium transition-all border border-transparent hover:border-indigo-500/20"
         >

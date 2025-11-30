@@ -2,7 +2,7 @@ import { SocialInsightsResponse, TrendingData } from "../types";
 import toast from 'react-hot-toast';
 
 // Determine API Base URL
-const API_BASE_URL = (import.meta as any).env?.VITE_API_URL || '';
+import { API_BASE_URL } from '../config/api';
 
 // Helper for fetch with timeout
 const fetchWithTimeout = async (url: string, options: RequestInit, timeout = 25000) => {
@@ -39,7 +39,7 @@ export const fetchSocialInsights = async (
         errorMsg = errorData.error || errorMsg;
       } catch (e) {
         const text = await response.text();
-        console.error("Non-JSON API Error:", text.substring(0, 200)); 
+        console.error("Non-JSON API Error:", text.substring(0, 200));
       }
       throw new Error(errorMsg);
     }

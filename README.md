@@ -27,6 +27,7 @@ This project uses a static frontend (Vite build output in `dist`) and an Express
 - Host the API server on Render (api.example.com) where you can securely store server secrets (GEMINI_API_KEY / API_KEY).
 
 Key points:
+
 - Server-only secrets must remain on the server (Render). Never put `GEMINI_API_KEY` or `API_KEY` into frontend code.
 - Configure `FRONTEND_URL` on the Render service to the frontend domain (e.g. `https://example.com`) so the server's CORS is restricted.
 - When building the frontend, set `VITE_API_BASE_URL` to `https://api.example.com` so client requests go to the Render-hosted API.

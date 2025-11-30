@@ -6,22 +6,23 @@ import { GoogleGenAI, Type } from "@google/genai";
 import dotenv from 'dotenv';
 import fs from 'fs';
 
-// Load environment variables
-// First try the default .env, then fall back to .env.local if present.
-dotenv.config();
-// If keys are not present after loading .env, try loading .env.local (common in many setups)
-if (!process.env.API_KEY && !process.env.GEMINI_API_KEY) {
-  // Use process.cwd() here to avoid referencing __dirname before it's defined
-  const localEnvPath = path.join(process.cwd(), '.env.local');
-  try {
-    if (fs.existsSync(localEnvPath)) {
-      dotenv.config({ path: localEnvPath });
-      console.log('Loaded environment from .env.local');
-    }
-  } catch (err) {
-    console.warn('Could not check for .env.local:', err?.message || err);
-  }
-}
+// Load environment variables FIRST
+import './config/env.js';
+
+// Now import passport AFTER env vars are loaded
+import connectDB from './config/db.js';
+import Post from './models/Post.js';
+import cron from 'node-cron';
+import session from 'express-session';
+import passport from './config/passport.js';
+import { postToTwitter } from './services/twitterService.js';
+import { postToLinkedIn } from './services/linkedinService.js';
+import { postToTikTok } from './services/tiktokService.js';
+import { postToYouTube } from './services/youtubeService.js';
+import { postToInstagram } from './services/instagramService.js';
+
+// Connect to Database
+connectDB();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -30,32 +31,151 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Middleware
-// Configure CORS to only allow requests from the frontend (set FRONTEND_URL to your frontend domain)
 const rawFrontend = process.env.FRONTEND_URL || 'http://localhost:5173';
 const allowedOrigins = rawFrontend.split(',').map(s => s.trim()).filter(Boolean);
-app.use(cors({
-  origin: function (origin, callback) {
-    // allow requests with no origin (curl, mobile apps, server-to-server)
-    if (!origin) return callback(null, true);
-    if (allowedOrigins.includes(origin)) return callback(null, true);
-    return callback(new Error('CORS policy violation: origin not allowed'), false);
+
+console.log('Allowed CORS origins:', allowedOrigins);
+
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  if (!origin) return next();
+  if (!allowedOrigins.includes(origin)) {
+    console.warn(`Blocked CORS origin: ${origin}`);
+    return res.status(403).json({ error: 'CORS origin not allowed' });
   }
-}));
+  return next();
+});
+
+app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
 
-// Serve Static Files from React Build (dist)
+// Session & Passport
+app.use(session({
+  secret: process.env.SESSION_SECRET || 'pulseai_secret_key',
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    secure: process.env.NODE_ENV === 'production', // true in production
+    maxAge: 24 * 60 * 60 * 1000 // 24 hours
+  }
+}));
+app.use(passport.initialize());
+app.use(passport.session());
+
 const distPath = path.join(__dirname, 'dist');
 app.use(express.static(distPath));
 
+// --- CRON JOB FOR SCHEDULED POSTS ---
+// Check every minute
+cron.schedule('* * * * *', async () => {
+  try {
+    const now = new Date();
+    const postsToPublish = await Post.find({
+      status: 'scheduled',
+      scheduledTime: { $lte: now }
+    });
+
+    for (const post of postsToPublish) {
+      console.log(`Publishing scheduled post ${post._id} to ${post.platform}`);
+      try {
+        // TODO: Retrieve user tokens from DB based on who created the post
+        // For now, we are using env vars as a fallback for single-user mode
+        if (post.platform === 'Twitter (X)') {
+          await postToTwitter(post.content, process.env.TWITTER_ACCESS_TOKEN);
+        } else if (post.platform === 'LinkedIn') {
+          await postToLinkedIn(post.content, process.env.LINKEDIN_ACCESS_TOKEN);
+        } else if (post.platform === 'TikTok') {
+          await postToTikTok(post.content, process.env.TIKTOK_ACCESS_TOKEN);
+        } else if (post.platform === 'YouTube Shorts') {
+          await postToYouTube(post.content, process.env.YOUTUBE_ACCESS_TOKEN);
+        } else if (post.platform === 'Instagram') {
+          await postToInstagram(post.content, process.env.INSTAGRAM_ACCESS_TOKEN);
+        }
+
+        post.status = 'posted';
+        post.postedAt = new Date();
+        await post.save();
+      } catch (err) {
+        console.error(`Failed to publish post ${post._id}:`, err);
+        post.status = 'failed';
+        post.error = err.message;
+        await post.save();
+      }
+    }
+  } catch (error) {
+    console.error('Cron job error:', error);
+  }
+});
+
 // --- API ROUTES ---
 
-// Health Check
 app.get('/api/health', (req, res) => {
   res.status(200).json({ status: 'ok' });
 });
 
-// Initialize Gemini
-// Support both API_KEY and GEMINI_API_KEY (the README/.env.local used GEMINI_API_KEY)
+app.get('/debug/origin', (req, res) => {
+  res.json({ origin: req.headers.origin || null, headers: { origin: req.headers.origin } });
+});
+
+// --- AUTH ROUTES ---
+
+// Get current user
+app.get('/api/user', (req, res) => {
+  if (req.isAuthenticated()) {
+    res.json({
+      authenticated: true,
+      user: {
+        id: req.user._id,
+        displayName: req.user.displayName,
+        avatarUrl: req.user.avatarUrl,
+        connectedPlatforms: {
+          twitter: !!req.user.tokens?.twitter?.accessToken,
+          linkedin: !!req.user.tokens?.linkedin?.accessToken,
+          tiktok: !!req.user.tokens?.tiktok?.accessToken
+        }
+      }
+    });
+  } else {
+    res.json({ authenticated: false });
+  }
+});
+
+// Twitter Auth
+app.get('/auth/twitter', passport.authenticate('twitter'));
+app.get('/auth/twitter/callback',
+  passport.authenticate('twitter', { failureRedirect: '/' }),
+  (req, res) => {
+    res.redirect('/'); // Redirect back to frontend
+  }
+);
+
+// LinkedIn Auth
+app.get('/auth/linkedin', passport.authenticate('linkedin'));
+app.get('/auth/linkedin/callback',
+  passport.authenticate('linkedin', { failureRedirect: '/' }),
+  (req, res) => {
+    res.redirect('/');
+  }
+);
+
+// TikTok Auth
+app.get('/auth/tiktok', passport.authenticate('tiktok'));
+app.get('/auth/tiktok/callback',
+  passport.authenticate('tiktok', { failureRedirect: '/' }),
+  (req, res) => {
+    res.redirect('/');
+  }
+);
+
+// Logout
+app.post('/auth/logout', (req, res) => {
+  req.logout((err) => {
+    if (err) return res.status(500).json({ error: 'Logout failed' });
+    res.json({ success: true });
+  });
+});
+
+
 const apiKey = process.env.API_KEY || process.env.GEMINI_API_KEY;
 let ai;
 if (!apiKey) {
@@ -65,17 +185,94 @@ if (!apiKey) {
   ai = new GoogleGenAI({ apiKey });
 }
 
+// --- POSTING ROUTES ---
+
+// Get all posts (scheduled + history)
+app.get('/api/posts', async (req, res) => {
+  try {
+    const posts = await Post.find().sort({ createdAt: -1 });
+    res.json(posts);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch posts' });
+  }
+});
+
+// Create a new post (Schedule or Post Now)
+app.post('/api/posts', async (req, res) => {
+  try {
+    const { platform, content, scheduledTime, postNow } = req.body;
+
+    // Check if user is authenticated for the platform
+    // For now, we allow it to proceed to use the mock/env fallback if not logged in
+    // In production, you would enforce req.isAuthenticated() here.
+
+    if (postNow) {
+      // Post immediately
+      let result;
+      // Use user token if available, otherwise fall back to env (or mock)
+      const userTokens = req.user?.tokens || {};
+
+      if (platform === 'Twitter (X)') {
+        result = await postToTwitter(content, userTokens.twitter?.accessToken || process.env.TWITTER_ACCESS_TOKEN);
+      } else if (platform === 'LinkedIn') {
+        result = await postToLinkedIn(content, userTokens.linkedin?.accessToken || process.env.LINKEDIN_ACCESS_TOKEN);
+      } else if (platform === 'TikTok') {
+        result = await postToTikTok(content, userTokens.tiktok?.accessToken || process.env.TIKTOK_ACCESS_TOKEN);
+      } else if (platform === 'YouTube Shorts') {
+        result = await postToYouTube(content, userTokens.google?.accessToken || process.env.YOUTUBE_ACCESS_TOKEN);
+      } else if (platform === 'Instagram') {
+        result = await postToInstagram(content, userTokens.instagram?.accessToken || process.env.INSTAGRAM_ACCESS_TOKEN);
+      } else {
+        // Fallback
+        result = { id: 'mock-' + Date.now() };
+      }
+
+      const newPost = await Post.create({
+        platform,
+        content,
+        status: 'posted',
+        postedAt: new Date()
+      });
+      return res.json(newPost);
+
+    } else {
+      // Schedule
+      const newPost = await Post.create({
+        platform,
+        content,
+        scheduledTime: new Date(scheduledTime),
+        status: 'scheduled'
+      });
+      return res.json(newPost);
+    }
+
+  } catch (error) {
+    console.error('Posting error:', error);
+    res.status(500).json({ error: 'Failed to create post' });
+  }
+});
+
+// Delete a post
+app.delete('/api/posts/:id', async (req, res) => {
+  try {
+    await Post.findByIdAndDelete(req.params.id);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to delete post' });
+  }
+});
+
+
 app.post('/api/insights', async (req, res) => {
   try {
     const { industry, timezone } = req.body;
-    
+
     if (!apiKey) {
-      console.error("API Request blocked: No Gemini API key configured (API_KEY or GEMINI_API_KEY)." );
+      console.error("API Request blocked: No Gemini API key configured (API_KEY or GEMINI_API_KEY).");
       return res.status(500).json({ error: "Server API Key not configured" });
     }
 
     const now = new Date();
-    // Use the timezone provided by client or default to UTC
     const clientTime = new Date(now.toLocaleString("en-US", { timeZone: timezone || "UTC" }));
     const day = clientTime.toLocaleDateString('en-US', { weekday: 'long' });
     const time = clientTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
@@ -140,10 +337,9 @@ app.post('/api/insights', async (req, res) => {
 
     let jsonText = response.text;
     if (!jsonText) throw new Error("No data received from Gemini");
-    
-    // CLEANING: Strip markdown code blocks if present (common issue with LLMs)
+
     jsonText = jsonText.replace(/```json/g, '').replace(/```/g, '').trim();
-    
+
     res.json(JSON.parse(jsonText));
 
   } catch (error) {
@@ -188,8 +384,7 @@ app.post('/api/trending', async (req, res) => {
     });
 
     const text = response.text || "";
-    
-    // Parse the text format on the server side
+
     const items = [];
     const lines = text.split('\n');
     let currentItem = {};
@@ -226,12 +421,10 @@ app.post('/api/trending', async (req, res) => {
   }
 });
 
-// Fallback for SPA routing (must be last)
 app.get('*', (req, res) => {
   res.sendFile(path.join(distPath, 'index.html'));
 });
 
-// Start Server
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
