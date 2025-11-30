@@ -5,10 +5,13 @@ import { Navbar } from './components/Navbar';
 import { HomePage } from './pages/HomePage';
 import { DashboardPage } from './pages/DashboardPage';
 import { TopicsPage } from './pages/TopicsPage';
+import { PrivacyPolicy } from './pages/PrivacyPolicy';
+import { TermsOfService } from './pages/TermsOfService';
+import { ContactPage } from './pages/ContactPage';
 import { TagsPage } from './pages/TagsPage';
 import { HowToUsePage } from './pages/HowToUsePage';
 import { ComingSoonPage } from './components/ComingSoonPage';
-import { PenTool } from 'lucide-react';
+import { PenTool, Hash } from 'lucide-react';
 
 const App: React.FC = () => {
   return (
@@ -36,7 +39,10 @@ const App: React.FC = () => {
         <Route path="/" element={<HomePage />} />
         <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/topics" element={<TopicsPage />} />
-        <Route path="/tags" element={<TagsPage />} />
+        <Route path="/privacy" element={<PrivacyPolicy />} />
+        <Route path="/terms" element={<TermsOfService />} />
+        <Route path="/contact" element={<ContactPage />} />
+        <Route path="/tags" element={<ComingSoonPage title="Hashtag Generator" description="AI-powered hashtag suggestions coming soon." icon={<Hash className="w-12 h-12 text-indigo-400" />} />} />
         <Route path="/how-to-use" element={<HowToUsePage />} />
         <Route
           path="/create"
