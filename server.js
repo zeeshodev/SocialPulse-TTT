@@ -106,7 +106,7 @@ app.post('/api/insights', async (req, res) => {
     }
 
     const genai = new GoogleGenerativeAI(apiKey);
-    const model = genai.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
+    const model = genai.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
     const prompt = `You are a social media strategy expert. Analyze the "${industry || 'general'}" industry and provide insights for Twitter (X), LinkedIn, and TikTok.
 
@@ -170,7 +170,7 @@ app.post('/api/trending', async (req, res) => {
     }
 
     const genai = new GoogleGenerativeAI(apiKey);
-    const model = genai.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
+    const model = genai.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
     const prompt = `You are a social media trends analyst. Identify the top 5 trending topics for the "${industry || 'general'}" industry right now.
 
