@@ -69,7 +69,7 @@ export const ContactPage: React.FC = () => {
                                 <div>
                                     <h3 className="text-lg font-semibold text-white mb-2">Chat with us</h3>
                                     <p className="text-slate-400 mb-2">Speak to our friendly team via email.</p>
-                                    <a href="mailto:support@socialpulse.ai" className="text-indigo-400 hover:text-indigo-300 font-medium transition-colors">support@socialpulse.ai</a>
+                                    <a href="mailto:socialpulseai@gmail.com" className="text-indigo-400 hover:text-indigo-300 font-medium transition-colors">socialpulseai@gmail.com</a>
                                 </div>
                             </div>
                         </div>
@@ -82,7 +82,7 @@ export const ContactPage: React.FC = () => {
                                 <div>
                                     <h3 className="text-lg font-semibold text-white mb-2">Visit us</h3>
                                     <p className="text-slate-400 mb-2">Visit our office HQ.</p>
-                                    <p className="text-slate-300">100 Smith Street, Collingwood VIC 3066 AU</p>
+                                    <p className="text-slate-300">Main Boulevard,Paragon City , Lahore , Pakistan</p>
                                 </div>
                             </div>
                         </div>
@@ -95,7 +95,7 @@ export const ContactPage: React.FC = () => {
                                 <div>
                                     <h3 className="text-lg font-semibold text-white mb-2">Call us</h3>
                                     <p className="text-slate-400 mb-2">Mon-Fri from 8am to 5pm.</p>
-                                    <a href="tel:+15550000000" className="text-indigo-400 hover:text-indigo-300 font-medium transition-colors">+1 (555) 000-0000</a>
+                                    <a href="tel:+923707203692" className="text-indigo-400 hover:text-indigo-300 font-medium transition-colors">+92(370)7203692</a>
                                 </div>
                             </div>
                         </div>

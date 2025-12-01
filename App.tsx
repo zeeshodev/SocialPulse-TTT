@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { Navbar } from './components/Navbar';
+import { Footer } from './components/Footer';
 import { HomePage } from './pages/HomePage';
 import { DashboardPage } from './pages/DashboardPage';
 import { TopicsPage } from './pages/TopicsPage';
@@ -55,6 +56,8 @@ const App: React.FC = () => {
           }
         />
       </Routes>
+
+      <Footer />
     </BrowserRouter>
   );
 };

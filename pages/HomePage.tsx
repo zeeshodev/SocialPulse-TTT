@@ -7,7 +7,6 @@ import { Activity, Zap, Search, Globe, Sparkles, Settings } from 'lucide-react';
 import { FeaturesSection } from '../components/FeaturesSection';
 import { WhyChooseUs } from '../components/WhyChooseUs';
 import { FAQSection } from '../components/FAQSection';
-import { Footer } from '../components/Footer';
 
 const DEFAULT_INDUSTRY = "";
 
@@ -158,7 +157,6 @@ export const HomePage: React.FC = () => {
             <FeaturesSection />
             <WhyChooseUs />
             <FAQSection />
-            <Footer />
         </div>
     );
 };
