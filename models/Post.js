@@ -31,6 +31,10 @@ const postSchema = new mongoose.Schema({
     }
 });
 
+// Indexes for better query performance
+postSchema.index({ status: 1, scheduledTime: 1 }); // For cron job queries
+postSchema.index({ createdAt: -1 }); // For sorting by creation date
+
 const Post = mongoose.model('Post', postSchema);
 
 export default Post;

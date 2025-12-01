@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import compression from 'compression';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { GoogleGenAI, Type } from "@google/genai";
@@ -47,36 +48,100 @@ app.use((req, res, next) => {
   return next();
 });
 
+// Enable compression for all responses (reduces bandwidth by 60-80%)
+app.use(compression({
+  level: 6, // Compression level (0-9, 6 is good balance)
+  threshold: 1024, // Only compress responses > 1KB
+  filter: (req, res) => {
+    if (req.headers['x-no-compression']) {
+      return false;
+    }
+    return compression.filter(req, res);
+  }
+}));
+
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
 
-// Session & Passport
-app.use(session({
+// Serve static files BEFORE session middleware for better performance
+const distPath = path.join(__dirname, 'dist');
+app.use(express.static(distPath, {
+  maxAge: '1d', // Cache static files for 1 day
+  etag: true
+}));
+
+// Session & Passport (only for API/auth routes, not static files)
+const sessionMiddleware = session({
   secret: process.env.SESSION_SECRET || 'pulseai_secret_key',
   resave: false,
   saveUninitialized: false,
   cookie: {
-    secure: process.env.NODE_ENV === 'production', // true in production
+    secure: process.env.NODE_ENV === 'production',
     maxAge: 24 * 60 * 60 * 1000 // 24 hours
   }
-}));
-app.use(passport.initialize());
-app.use(passport.session());
+});
 
-const distPath = path.join(__dirname, 'dist');
-app.use(express.static(distPath));
+// Apply session only to API and auth routes
+app.use('/api/*', sessionMiddleware);
+app.use('/auth/*', sessionMiddleware);
+app.use('/api/*', passport.initialize());
+app.use('/api/*', passport.session());
+app.use('/auth/*', passport.initialize());
+app.use('/auth/*', passport.session());
+
+// --- SIMPLE CACHE FOR API RESPONSES ---
+const cache = new Map();
+const CACHE_DURATION = {
+  insights: 5 * 60 * 1000, // 5 minutes
+  trending: 15 * 60 * 1000 // 15 minutes
+};
+
+function getCached(key) {
+  const cached = cache.get(key);
+  if (cached && Date.now() - cached.timestamp < cached.duration) {
+    return cached.data;
+  }
+  cache.delete(key);
+  return null;
+}
+
+function setCache(key, data, duration) {
+  cache.set(key, { data, timestamp: Date.now(), duration });
+}
+
+// Clean cache every 30 minutes
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, value] of cache.entries()) {
+    if (now - value.timestamp > value.duration) {
+      cache.delete(key);
+    }
+  }
+}, 30 * 60 * 1000);
 
 // --- CRON JOB FOR SCHEDULED POSTS ---
-// Check every minute
+// Check every minute (optimized to process max 10 posts at once)
+let isProcessingScheduled = false;
 cron.schedule('* * * * *', async () => {
+  if (isProcessingScheduled) {
+    console.log('Skipping cron: previous job still running');
+    return;
+  }
+
+  isProcessingScheduled = true;
   try {
     const now = new Date();
     const postsToPublish = await Post.find({
       status: 'scheduled',
       scheduledTime: { $lte: now }
-    });
+    }).limit(10); // Process max 10 posts per run
 
-    for (const post of postsToPublish) {
+    if (postsToPublish.length > 0) {
+      console.log(`Found ${postsToPublish.length} posts to publish`);
+    }
+
+    // Process posts in parallel for better performance
+    await Promise.allSettled(postsToPublish.map(async (post) => {
       console.log(`Publishing scheduled post ${post._id} to ${post.platform}`);
       try {
         // TODO: Retrieve user tokens from DB based on who created the post
@@ -102,16 +167,35 @@ cron.schedule('* * * * *', async () => {
         post.error = err.message;
         await post.save();
       }
-    }
+    }));
   } catch (error) {
     console.error('Cron job error:', error);
+  } finally {
+    isProcessingScheduled = false;
   }
 });
 
 // --- API ROUTES ---
 
+// Request timeout middleware (30 seconds for all API routes)
+app.use('/api/*', (req, res, next) => {
+  req.setTimeout(30000); // 30 second timeout
+  res.setTimeout(30000);
+  next();
+});
+
 app.get('/api/health', (req, res) => {
-  res.status(200).json({ status: 'ok' });
+  const uptime = process.uptime();
+  const memUsage = process.memoryUsage();
+  res.status(200).json({
+    status: 'ok',
+    uptime: Math.floor(uptime),
+    memory: {
+      used: Math.floor(memUsage.heapUsed / 1024 / 1024) + 'MB',
+      total: Math.floor(memUsage.heapTotal / 1024 / 1024) + 'MB'
+    },
+    cacheSize: cache.size
+  });
 });
 
 app.get('/debug/origin', (req, res) => {
@@ -302,6 +386,17 @@ app.post('/api/insights', async (req, res) => {
     const clientTime = new Date(now.toLocaleString("en-US", { timeZone: timezone || "UTC" }));
     const day = clientTime.toLocaleDateString('en-US', { weekday: 'long' });
     const time = clientTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+    const hour = clientTime.getHours();
+
+    // Create cache key based on industry, day, and hour (not minute for better cache hits)
+    const cacheKey = `insights:${industry || 'general'}:${day}:${hour}:${timezone || 'UTC'}`;
+
+    // Check cache first
+    const cached = getCached(cacheKey);
+    if (cached) {
+      console.log(`Returning cached insights for: ${industry} at ${time} (${day})`);
+      return res.json(cached);
+    }
 
     console.log(`Generating insights for: ${industry} at ${time} (${day})`);
 
@@ -365,8 +460,12 @@ app.post('/api/insights', async (req, res) => {
     if (!jsonText) throw new Error("No data received from Gemini");
 
     jsonText = jsonText.replace(/```json/g, '').replace(/```/g, '').trim();
+    const result = JSON.parse(jsonText);
 
-    res.json(JSON.parse(jsonText));
+    // Cache the result
+    setCache(cacheKey, result, CACHE_DURATION.insights);
+
+    res.json(result);
 
   } catch (error) {
     console.error("API Insights Error:", error);
@@ -381,6 +480,18 @@ app.post('/api/trending', async (req, res) => {
     if (!apiKey) {
       return res.status(500).json({ error: "Server API Key not configured" });
     }
+
+    // Create cache key based on industry
+    const cacheKey = `trending:${industry || 'general'}`;
+
+    // Check cache first
+    const cached = getCached(cacheKey);
+    if (cached) {
+      console.log(`Returning cached trending topics for: ${industry}`);
+      return res.json(cached);
+    }
+
+    console.log(`Fetching trending topics for: ${industry}`);
 
     const prompt = `
     You are a social media trends analyst and SEO master So you have to analyze the social trends with traffic analytics and provide accurate data to related industry or topic. Identify the best time to post on social media for the "${industry || 'general'}" industry right now.
@@ -435,11 +546,16 @@ app.post('/api/trending', async (req, res) => {
       .map((chunk) => chunk.web ? { title: chunk.web.title, uri: chunk.web.uri } : null)
       .filter((s) => s !== null);
 
-    res.json({
+    const result = {
       rawText: text,
       items,
       sources
-    });
+    };
+
+    // Cache the result
+    setCache(cacheKey, result, CACHE_DURATION.trending);
+
+    res.json(result);
 
   } catch (error) {
     console.error("API Trending Error:", error);
