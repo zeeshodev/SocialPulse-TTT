@@ -2,7 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import dotenv from 'dotenv';
 import fs from 'fs';
 
@@ -105,7 +105,7 @@ app.post('/api/insights', async (req, res) => {
       return res.status(500).json({ error: 'API key not configured' });
     }
 
-    const genai = new GoogleGenAI({ apiKey });
+    const genai = new GoogleGenerativeAI(apiKey);
     const model = genai.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
 
     const prompt = `You are a social media strategy expert. Analyze the "${industry || 'general'}" industry and provide insights for Twitter (X), LinkedIn, and TikTok.
@@ -169,7 +169,7 @@ app.post('/api/trending', async (req, res) => {
       return res.status(500).json({ error: 'API key not configured' });
     }
 
-    const genai = new GoogleGenAI({ apiKey });
+    const genai = new GoogleGenerativeAI(apiKey);
     const model = genai.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
 
     const prompt = `You are a social media trends analyst. Identify the top 5 trending topics for the "${industry || 'general'}" industry right now.
